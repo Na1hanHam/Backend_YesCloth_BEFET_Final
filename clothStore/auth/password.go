@@ -2,13 +2,12 @@ package auth
 
 import "golang.org/x/crypto/bcrypt"
 
-// HashPassword แปลงรหัสผ่านเป็นลายนิ้วมือ bcrypt ที่ย้อนกลับไม่ได้
-func HashPassword(plain string) (string, error) {
-	b, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
-	return string(b), err
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
 }
 
-// CheckPassword ตอบว่ารหัสที่พิมพ์มาตรงกับลายนิ้วมือที่เก็บไว้ไหม
-func CheckPassword(hash, plain string) bool {
-	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain)) == nil
+func CheckPassword(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }

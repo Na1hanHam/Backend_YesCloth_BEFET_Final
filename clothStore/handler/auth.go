@@ -1,87 +1,115 @@
 package handler
 
 import (
-    "encoding/json"
-    "errors"
-    "net/http"
-    "strings"
-    "unicode/utf8"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
 
-    "moviehub/auth"
-    "moviehub/store"
+	"clothStore/auth"
+	"clothStore/store"
 )
 
-type loginReq struct {
-    Email    string `json:"email"`
-    Password string `json:"password"`
+type AuthHandler struct {
+	Store *store.UserStore
 }
 
-type registerReq struct {
-    Email       string `json:"email"`
-    Password    string `json:"password"`
-    DisplayName string `json:"displayName"`
+func NewAuthHandler(s *store.UserStore) *AuthHandler {
+	return &AuthHandler{Store: s}
 }
 
-func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-    var req registerReq
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        writeError(w, http.StatusBadRequest, "BAD_JSON", "อ่านกล่อง JSON ไม่ออก")
-        return
-    }
-    email := strings.ToLower(strings.TrimSpace(req.Email))
-    name := strings.TrimSpace(req.DisplayName)
-    switch {
-    case !strings.Contains(email, "@") || len(email) > 255:
-        writeError(w, http.StatusBadRequest, "BAD_EMAIL", "รูปแบบอีเมลไม่ถูกต้อง")
-        return
-    case utf8.RuneCountInString(req.Password) < 8 || len(req.Password) > 72:
-        writeError(w, http.StatusBadRequest, "BAD_PASSWORD", "รหัสผ่านต้องยาว 8 ตัวอักษรขึ้นไป และไม่เกิน 72 ไบต์")
-        return
-    case name == "" || utf8.RuneCountInString(name) > 50:
-        writeError(w, http.StatusBadRequest, "BAD_NAME", "ต้องมีชื่อที่แสดง และยาวไม่เกิน 50 ตัวอักษร")
-        return
-    }
-    hash, err := auth.HashPassword(req.Password)
-    if err != nil {
-        internal(w, err)
-        return
-    }
-    m, err := h.Store.CreateMember(r.Context(), email, hash, name)
-    if errors.Is(err, store.ErrEmailTaken) {
-        writeError(w, http.StatusConflict, "EMAIL_TAKEN", "อีเมลนี้มีบัญชีอยู่แล้ว")
-        return
-    }
-    if err != nil {
-        internal(w, err)
-        return
-    }
-    writeJSON(w, http.StatusCreated, m)
+type RegisterRequest struct {
+	FullName string `json:"full_name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-    var req loginReq
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        writeError(w, http.StatusBadRequest, "BAD_JSON", "อ่านกล่อง JSON ไม่ออก")
-        return
-    }
-    email := strings.ToLower(strings.TrimSpace(req.Email))
-    m, err := h.Store.MemberByEmail(r.Context(), email)
-    if errors.Is(err, store.ErrNotFound) {
-        writeError(w, http.StatusUnauthorized, "BAD_CREDENTIALS", "อีเมลหรือรหัสผ่านไม่ถูกต้อง")
-        return
-    }
-    if err != nil {
-        internal(w, err)
-        return
-    }
-    if !auth.CheckPassword(m.PasswordHash, req.Password) {
-        writeError(w, http.StatusUnauthorized, "BAD_CREDENTIALS", "อีเมลหรือรหัสผ่านไม่ถูกต้อง")
-        return
-    }
-    token, err := h.Tickets.Issue(m.ID, m.Role)
-    if err != nil {
-        internal(w, err)
-        return
-    }
-    writeJSON(w, http.StatusOK, map[string]any{"token": token, "member": m})
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+		return
+	}
+
+	req.FullName = strings.TrimSpace(req.FullName)
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	if len(strings.Fields(req.FullName)) < 2 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "full_name must include both name and surname"})
+		return
+	}
+
+	if req.Email == "" || len(req.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "valid email and password (min 6 chars) are required"})
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(req.Password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to process password"})
+		return
+	}
+
+	user, err := h.Store.CreateUser(r.Context(), req.FullName, req.Email, hashedPassword)
+	if err != nil {
+		if errors.Is(err, store.ErrEmailExists) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "email is already registered"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create user"})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"message": "user registered successfully",
+		"user":    user,
+	})
+}
+
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	var req LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+
+	user, err := h.Store.GetUserByEmail(r.Context(), req.Email)
+	if err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
+		return
+	}
+
+	if !auth.CheckPassword(req.Password, user.PasswordHash) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
+		return
+	}
+
+	token, err := auth.GenerateToken(user.UserID, user.Email, user.Role)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"message": "login successful",
+		"token":   token,
+		"user":    user,
+	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, data any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(data)
 }
