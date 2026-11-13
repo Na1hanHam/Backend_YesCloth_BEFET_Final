@@ -36,7 +36,10 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/register", authHandler.Register)
 	mux.HandleFunc("POST /api/login", authHandler.Login)
-
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte("ok"))
+})
 	// 3. Accept Frontend Requests
 	port := os.Getenv("PORT")
 	if port == "" {
