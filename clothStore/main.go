@@ -34,10 +34,12 @@ func main() {
 	authHandler := handler.NewAuthHandler(userStore)
 	categoryStore := store.NewCategoryStore(pool)
 	categoryHandler := handler.NewCategoryHandler(categoryStore)
+
 	
-	mux.HandleFunc("GET /api/categories", categoryHandler.List)
 
 	mux := http.NewServeMux()
+	
+	mux.HandleFunc("GET /api/categories", categoryHandler.List)
 	mux.HandleFunc("POST /api/register", authHandler.Register)
 	mux.HandleFunc("POST /api/login", authHandler.Login)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
