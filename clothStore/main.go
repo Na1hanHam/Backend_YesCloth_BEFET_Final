@@ -32,11 +32,17 @@ func main() {
 	// 2. Wire Store & Handlers
 	userStore := store.NewUserStore(pool)
 	authHandler := handler.NewAuthHandler(userStore)
+	categoryStore := store.NewCategoryStore(pool)
+	categoryHandler := handler.NewCategoryHandler(categoryStore)
+	
+	mux.HandleFunc("GET /api/categories", categoryHandler.List)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/register", authHandler.Register)
 	mux.HandleFunc("POST /api/login", authHandler.Login)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+
+
     w.WriteHeader(http.StatusOK)
     w.Write([]byte("ok"))
 })
