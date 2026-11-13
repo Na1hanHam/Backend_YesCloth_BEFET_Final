@@ -39,7 +39,15 @@ func main() {
 	productStore := store.NewProductStore(pool)
 	productHandler := handler.NewProductHandler(productStore)
 
+		favoriteStore := store.NewFavoriteStore(pool)
+	favoriteHandler := handler.NewFavoriteHandler(favoriteStore)
+
+
+
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/favorites", mw.RequireAuth(favoriteHandler.List))
+	mux.HandleFunc("POST /api/favorites", mw.RequireAuth(favoriteHandler.Add))
+	mux.HandleFunc("DELETE /api/favorites/{productId}", mw.RequireAuth(favoriteHandler.Remove))
 	mux.HandleFunc("GET /api/categories", categoryHandler.List)
 	mux.HandleFunc("GET /api/products", productHandler.List)
 	mux.HandleFunc("POST /api/register", authHandler.Register)
