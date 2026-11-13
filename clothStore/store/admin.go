@@ -41,12 +41,40 @@ type AdminReview struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type CreateUserInput struct {
+	Name            string `json:"name"`
+	Email           string `json:"email"`
+	Password        string `json:"password"`
+	Role            string `json:"role"`
+	ShippingAddress string `json:"shippingAddress"`
+}
+
+
 type AdminStore struct {
 	DB *pgxpool.Pool
 }
 
 func NewAdminStore(db *pgxpool.Pool) *AdminStore {
 	return &AdminStore{DB: db}
+}
+
+func (s *AdminStore) CreateUser(ctx context.Context, in CreateUserInput, passwordHash string) (*AdminUser, error) {
+	role := strings.TrimSpace(in.Role)
+	if role == "" {
+		role = "customer"
+	}
+	var u AdminUser
+	err := s.DB.QueryRow(ctx, `
+		INSERT INTO "User" (full_name, email, password_hash, role, shipping_address)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING user_id, full_name, email, COALESCE(role, 'customer'), COALESCE(shipping_address, '')
+	`, strings.TrimSpace(in.Name), strings.ToLower(strings.TrimSpace(in.Email)), passwordHash, role, strings.TrimSpace(in.ShippingAddress)).Scan(
+		&u.ID, &u.Name, &u.Email, &u.Role, &u.ShippingAddress,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
 // ---------- Users (Members) ----------

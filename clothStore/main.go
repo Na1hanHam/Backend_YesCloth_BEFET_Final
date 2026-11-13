@@ -39,27 +39,48 @@ func main() {
 	productStore := store.NewProductStore(pool)
 	productHandler := handler.NewProductHandler(productStore)
 
-		favoriteStore := store.NewFavoriteStore(pool)
+	favoriteStore := store.NewFavoriteStore(pool)
 	favoriteHandler := handler.NewFavoriteHandler(favoriteStore)
 
 	adminStore := store.NewAdminStore(pool)
 	adminHandler := handler.NewAdminHandler(adminStore, productStore)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/favorites", mw.RequireAuth(favoriteHandler.List))
-	mux.HandleFunc("POST /api/favorites", mw.RequireAuth(favoriteHandler.Add))
-	mux.HandleFunc("DELETE /api/favorites/{productId}", mw.RequireAuth(favoriteHandler.Remove))
-	mux.HandleFunc("GET /api/categories", categoryHandler.List)
-	mux.HandleFunc("GET /api/products", productHandler.List)
+
+	// Auth
 	mux.HandleFunc("POST /api/register", authHandler.Register)
 	mux.HandleFunc("POST /api/login", authHandler.Login)
 
-		mux.HandleFunc("GET /api/reviews", adminHandler.ListReviews)
-	mux.HandleFunc("GET /api/admin/users", mw.RequireAdmin(adminHandler.ListUsers))
-	mux.HandleFunc("GET /api/admin/orders", mw.RequireAdmin(adminHandler.ListOrders))
+	// Categories
+	mux.HandleFunc("GET /api/categories", categoryHandler.List)
+	mux.HandleFunc("POST /api/admin/categories", mw.RequireAdmin(categoryHandler.Create))
+	mux.HandleFunc("PUT /api/admin/categories/{id}", mw.RequireAdmin(categoryHandler.Update))
+	mux.HandleFunc("DELETE /api/admin/categories/{id}", mw.RequireAdmin(categoryHandler.Delete))
+
+	// Products
+	mux.HandleFunc("GET /api/products", productHandler.List)
 	mux.HandleFunc("POST /api/admin/products", mw.RequireAdmin(adminHandler.CreateProduct))
 	mux.HandleFunc("PUT /api/admin/products/{id}", mw.RequireAdmin(adminHandler.UpdateProduct))
 	mux.HandleFunc("DELETE /api/admin/products/{id}", mw.RequireAdmin(adminHandler.DeleteProduct))
+
+	// Favorites (Wishlist)
+	mux.HandleFunc("GET /api/favorites", mw.RequireAuth(favoriteHandler.List))
+	mux.HandleFunc("POST /api/favorites", mw.RequireAuth(favoriteHandler.Add))
+	mux.HandleFunc("DELETE /api/favorites/{productId}", mw.RequireAuth(favoriteHandler.Remove))
+
+	// Reviews (Public GET, Logged-in POST, Admin PUT/DELETE)
+	mux.HandleFunc("GET /api/reviews", adminHandler.ListReviews)
+	mux.HandleFunc("POST /api/reviews", mw.RequireAuth(adminHandler.CreateReview))
+	mux.HandleFunc("PUT /api/admin/reviews/{id}", mw.RequireAdmin(adminHandler.UpdateReview))
+	mux.HandleFunc("DELETE /api/admin/reviews/{id}", mw.RequireAdmin(adminHandler.DeleteReview))
+
+	// Admin Users & Orders
+	mux.HandleFunc("GET /api/admin/users", mw.RequireAdmin(adminHandler.ListUsers))
+	mux.HandleFunc("POST /api/admin/users", mw.RequireAdmin(adminHandler.CreateUser))
+	mux.HandleFunc("PUT /api/admin/users/{id}", mw.RequireAdmin(adminHandler.UpdateUser))
+	mux.HandleFunc("DELETE /api/admin/users/{id}", mw.RequireAdmin(adminHandler.DeleteUser))
+	mux.HandleFunc("GET /api/admin/orders", mw.RequireAdmin(adminHandler.ListOrders))
+
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))

@@ -29,6 +29,31 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// POST /api/admin/users
+func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var in store.CreateUserInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" || in.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and email are required"})
+		return
+	}
+	if len(in.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 6 characters"})
+		return
+	}
+	hashed, err := auth.HashPassword(in.Password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to hash password"})
+		return
+	}
+	u, err := h.AdminStore.CreateUser(r.Context(), in, hashed)
+	if err != nil {
+		log.Printf("Admin CreateUser error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create user (email may already exist)"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, u)
+}
+
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
