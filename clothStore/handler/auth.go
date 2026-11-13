@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -29,31 +30,6 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// POST /api/admin/users
-func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	var in store.CreateUserInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" || in.Email == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and email are required"})
-		return
-	}
-	if len(in.Password) < 6 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 6 characters"})
-		return
-	}
-	hashed, err := auth.HashPassword(in.Password)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to hash password"})
-		return
-	}
-	u, err := h.AdminStore.CreateUser(r.Context(), in, hashed)
-	if err != nil {
-		log.Printf("Admin CreateUser error: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create user (email may already exist)"})
-		return
-	}
-	writeJSON(w, http.StatusCreated, u)
-}
-
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -76,6 +52,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	hashedPassword, err := auth.HashPassword(req.Password)
 	if err != nil {
+		log.Printf("HashPassword error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to process password"})
 		return
 	}
@@ -86,6 +63,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "email is already registered"})
 			return
 		}
+		log.Printf("CreateUser error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create user"})
 		return
 	}
@@ -111,6 +89,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 			return
 		}
+		log.Printf("GetUserByEmail error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 		return
 	}
@@ -122,6 +101,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	token, err := auth.GenerateToken(user.UserID, user.Email, user.Role)
 	if err != nil {
+		log.Printf("GenerateToken error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
 		return
 	}

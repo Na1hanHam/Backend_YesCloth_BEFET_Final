@@ -6,18 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
+	"clothStore/auth"
 	"clothStore/mw"
 	"clothStore/store"
 )
-
-type CreateUserInput struct {
-	Name            string `json:"name"`
-	Email           string `json:"email"`
-	Password        string `json:"password"`
-	Role            string `json:"role"`
-	ShippingAddress string `json:"shippingAddress"`
-}
-
 
 type AdminHandler struct {
 	AdminStore   *store.AdminStore
@@ -30,25 +22,6 @@ func NewAdminHandler(as *store.AdminStore, ps *store.ProductStore) *AdminHandler
 
 // ---------- Users (Members) ----------
 
-func (s *AdminStore) CreateUser(ctx context.Context, in CreateUserInput, passwordHash string) (*AdminUser, error) {
-	role := strings.TrimSpace(in.Role)
-	if role == "" {
-		role = "customer"
-	}
-	var u AdminUser
-	err := s.DB.QueryRow(ctx, `
-		INSERT INTO "User" (full_name, email, password_hash, role, shipping_address)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING user_id, full_name, email, COALESCE(role, 'customer'), COALESCE(shipping_address, '')
-	`, strings.TrimSpace(in.Name), strings.ToLower(strings.TrimSpace(in.Email)), passwordHash, role, strings.TrimSpace(in.ShippingAddress)).Scan(
-		&u.ID, &u.Name, &u.Email, &u.Role, &u.ShippingAddress,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &u, nil
-}
-
 // GET /api/admin/users
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.AdminStore.ListUsers(r.Context())
@@ -58,6 +31,31 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, users)
+}
+
+// POST /api/admin/users
+func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+	var in store.CreateUserInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" || in.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and email are required"})
+		return
+	}
+	if len(in.Password) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password must be at least 6 characters"})
+		return
+	}
+	hashed, err := auth.HashPassword(in.Password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to hash password"})
+		return
+	}
+	u, err := h.AdminStore.CreateUser(r.Context(), in, hashed)
+	if err != nil {
+		log.Printf("Admin CreateUser error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create user (email may already exist)"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, u)
 }
 
 // PUT /api/admin/users/{id}
