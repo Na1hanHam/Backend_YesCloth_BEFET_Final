@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"clothStore/mw"
 	"clothStore/store"
 )
 
@@ -18,6 +19,8 @@ func NewAdminHandler(as *store.AdminStore, ps *store.ProductStore) *AdminHandler
 	return &AdminHandler{AdminStore: as, ProductStore: ps}
 }
 
+// ---------- Users (Members) ----------
+
 // GET /api/admin/users
 func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.AdminStore.ListUsers(r.Context())
@@ -28,6 +31,50 @@ func (h *AdminHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, users)
 }
+
+// PUT /api/admin/users/{id}
+func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid user id"})
+		return
+	}
+	var in store.UpdateUserInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" || in.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and email are required"})
+		return
+	}
+	if in.Role == "" {
+		in.Role = "customer"
+	}
+	if err := h.AdminStore.UpdateUser(r.Context(), id, in); err != nil {
+		log.Printf("Admin UpdateUser error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update user"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "user updated"})
+}
+
+// DELETE /api/admin/users/{id}
+func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid user id"})
+		return
+	}
+	if id == mw.GetUserID(r) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delete your own admin account"})
+		return
+	}
+	if err := h.AdminStore.DeleteUser(r.Context(), id); err != nil {
+		log.Printf("Admin DeleteUser error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete user"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "user deleted"})
+}
+
+// ---------- Orders ----------
 
 // GET /api/admin/orders
 func (h *AdminHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +87,9 @@ func (h *AdminHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, orders)
 }
 
-// GET /api/reviews (public so both ProductDetail and Admin can use it)
+// ---------- Reviews ----------
+
+// GET /api/reviews (public)
 func (h *AdminHandler) ListReviews(w http.ResponseWriter, r *http.Request) {
 	reviews, err := h.AdminStore.ListReviews(r.Context())
 	if err != nil {
@@ -50,6 +99,67 @@ func (h *AdminHandler) ListReviews(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, reviews)
 }
+
+// POST /api/reviews (authenticated customer/admin)
+func (h *AdminHandler) CreateReview(w http.ResponseWriter, r *http.Request) {
+	userID := mw.GetUserID(r)
+	var req struct {
+		ProductID int    `json:"productId"`
+		Rating    int    `json:"rating"`
+		Comment   string `json:"comment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ProductID <= 0 || req.Rating < 1 || req.Rating > 5 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "valid productId and rating (1-5) are required"})
+		return
+	}
+	rv, err := h.AdminStore.CreateReview(r.Context(), userID, req.ProductID, req.Rating, req.Comment)
+	if err != nil {
+		log.Printf("CreateReview error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to submit review"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, rv)
+}
+
+// PUT /api/admin/reviews/{id}
+func (h *AdminHandler) UpdateReview(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid review id"})
+		return
+	}
+	var req struct {
+		Rating  int    `json:"rating"`
+		Comment string `json:"comment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Rating < 1 || req.Rating > 5 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "rating must be between 1 and 5"})
+		return
+	}
+	if err := h.AdminStore.UpdateReview(r.Context(), id, req.Rating, req.Comment); err != nil {
+		log.Printf("UpdateReview error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update review"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "review updated"})
+}
+
+// DELETE /api/admin/reviews/{id}
+func (h *AdminHandler) DeleteReview(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid review id"})
+		return
+	}
+	if err := h.AdminStore.DeleteReview(r.Context(), id); err != nil {
+		log.Printf("DeleteReview error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete review"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "review deleted"})
+}
+
+// ---------- Products (Admin) ----------
 
 // POST /api/admin/products
 func (h *AdminHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
