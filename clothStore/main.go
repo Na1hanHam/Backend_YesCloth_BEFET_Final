@@ -42,7 +42,8 @@ func main() {
 		favoriteStore := store.NewFavoriteStore(pool)
 	favoriteHandler := handler.NewFavoriteHandler(favoriteStore)
 
-
+	adminStore := store.NewAdminStore(pool)
+	adminHandler := handler.NewAdminHandler(adminStore, productStore)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/favorites", mw.RequireAuth(favoriteHandler.List))
@@ -52,6 +53,13 @@ func main() {
 	mux.HandleFunc("GET /api/products", productHandler.List)
 	mux.HandleFunc("POST /api/register", authHandler.Register)
 	mux.HandleFunc("POST /api/login", authHandler.Login)
+
+		mux.HandleFunc("GET /api/reviews", adminHandler.ListReviews)
+	mux.HandleFunc("GET /api/admin/users", mw.RequireAdmin(adminHandler.ListUsers))
+	mux.HandleFunc("GET /api/admin/orders", mw.RequireAdmin(adminHandler.ListOrders))
+	mux.HandleFunc("POST /api/admin/products", mw.RequireAdmin(adminHandler.CreateProduct))
+	mux.HandleFunc("PUT /api/admin/products/{id}", mw.RequireAdmin(adminHandler.UpdateProduct))
+	mux.HandleFunc("DELETE /api/admin/products/{id}", mw.RequireAdmin(adminHandler.DeleteProduct))
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))

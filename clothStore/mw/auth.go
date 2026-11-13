@@ -44,3 +44,19 @@ func GetUserID(r *http.Request) int {
 	id, _ := r.Context().Value(UserIDKey).(int)
 	return id
 }
+
+func GetRole(r *http.Request) string {
+	role, _ := r.Context().Value(RoleKey).(string)
+	return role
+}
+func RequireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+		if GetRole(r) != "admin" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":"admin access required"}`))
+			return
+		}
+		next(w, r)
+	})
+}
