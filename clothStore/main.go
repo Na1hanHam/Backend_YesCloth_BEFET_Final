@@ -45,6 +45,10 @@ func main() {
 	adminStore := store.NewAdminStore(pool)
 	adminHandler := handler.NewAdminHandler(adminStore, productStore)
 
+		orderStore := store.NewOrderStore(pool)
+	orderHandler := handler.NewOrderHandler(orderStore)
+
+
 	mux := http.NewServeMux()
 
 	// Auth
@@ -80,6 +84,15 @@ func main() {
 	mux.HandleFunc("PUT /api/admin/users/{id}", mw.RequireAdmin(adminHandler.UpdateUser))
 	mux.HandleFunc("DELETE /api/admin/users/{id}", mw.RequireAdmin(adminHandler.DeleteUser))
 	mux.HandleFunc("GET /api/admin/orders", mw.RequireAdmin(adminHandler.ListOrders))
+
+		// Cart
+	mux.HandleFunc("GET /api/cart", mw.RequireAuth(orderHandler.GetCart))
+	mux.HandleFunc("POST /api/cart", mw.RequireAuth(orderHandler.AddToCart))
+	mux.HandleFunc("PUT /api/cart", mw.RequireAuth(orderHandler.UpdateCart))
+
+	// Orders & Checkout
+	mux.HandleFunc("POST /api/checkout", mw.RequireAuth(orderHandler.Checkout))
+	mux.HandleFunc("GET /api/orders/mine", mw.RequireAuth(orderHandler.ListMyOrders))
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
