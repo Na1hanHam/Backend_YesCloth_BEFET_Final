@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
+	
 )
 
 var (
@@ -79,7 +80,7 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*User, er
 
 func (s *UserStore) UpdatePasswordByEmail(ctx context.Context, email, newHash string) error {
     query := `UPDATE users SET password_hash = $1 WHERE email = $2`
-    tag, err := s.pool.Exec(ctx, query, newHash, email)
+    tag, err := s.DB.Exec(ctx, query, newHash, email)
     if err != nil {
         return err
     }
@@ -88,4 +89,3 @@ func (s *UserStore) UpdatePasswordByEmail(ctx context.Context, email, newHash st
     }
     return nil
 }
-
