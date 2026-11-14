@@ -93,6 +93,7 @@ func main() {
 	// Orders & Checkout
 	mux.HandleFunc("POST /api/checkout", mw.RequireAuth(orderHandler.Checkout))
 	mux.HandleFunc("GET /api/orders/mine", mw.RequireAuth(orderHandler.ListMyOrders))
+		mux.HandleFunc("POST /api/reset-password", authHandler.ResetPassword)
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

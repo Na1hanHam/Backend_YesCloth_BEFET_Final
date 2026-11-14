@@ -75,3 +75,18 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*User, er
 	}
 	return &u, nil
 }
+
+func (s *UserStore) UpdatePasswordByEmail(ctx context.Context, email, newPasswordHash string) error {
+	res, err := s.DB.Exec(ctx, `
+		UPDATE "User"
+		SET password_hash = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE email = $2
+	`, newPasswordHash, strings.ToLower(strings.TrimSpace(email)))
+	if err != nil {
+		return err
+	}
+	if res.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
