@@ -30,24 +30,42 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-type ResetPasswordReq struct {
-    Email       string `json:"email"`
-    NewPassword string `json:"new_password"`
+type ResetPasswordRequest struct {
+	Email       string `json:"email"`
+	NewPassword string `json:"new_password"`
 }
 
 func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
-    var req ResetPasswordReq
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
-        return
-    }
-    // Hash รหัสผ่านใหม่และอัปเดตลงฐานข้อมูล
-    hash, _ := auth.HashPassword(req.NewPassword)
-    if err := h.userStore.UpdatePasswordByEmail(r.Context(), req.Email, hash); err != nil {
-        http.Error(w, `{"error":"user not found"}`, http.StatusNotFound)
-        return
-    }
-    w.Write([]byte(`{"message":"password updated successfully"}`))
+	var req ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request payload"})
+		return
+	}
+
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if req.Email == "" || len(req.NewPassword) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "valid email and new password (min 6 chars) are required"})
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(req.NewPassword)
+	if err != nil {
+		log.Printf("HashPassword error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to process password"})
+		return
+	}
+
+	if err := h.Store.UpdatePasswordByEmail(r.Context(), req.Email, hashedPassword); err != nil {
+		if errors.Is(err, store.ErrUserNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
+		log.Printf("UpdatePasswordByEmail error: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "password updated successfully"})
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
