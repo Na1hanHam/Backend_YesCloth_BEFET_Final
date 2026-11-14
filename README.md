@@ -103,13 +103,4 @@ The project follows a standard **Layered / Clean Architecture**:
 | `PUT` | `/api/admin/reviews/{id}` | Admin | Update/moderate a review |
 | `DELETE` | `/api/admin/reviews/{id}` | Admin | Delete an inappropriate review |
 
----
 
-## ⚙️ Environment Variables
-
-Create a `.env` file in the root directory:
-
-```env
-PORT=8080
-DATABASE_URL=postgres://username:password@localhost:5432/clothstore?sslmode=disable
-JWT_SECRET=your-super-secret-jwt-key
