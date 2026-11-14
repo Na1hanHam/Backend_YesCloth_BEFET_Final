@@ -79,13 +79,14 @@ func (s *UserStore) GetUserByEmail(ctx context.Context, email string) (*User, er
 }
 
 func (s *UserStore) UpdatePasswordByEmail(ctx context.Context, email, newHash string) error {
-    query := `UPDATE users SET password_hash = $1 WHERE email = $2`
-    tag, err := s.DB.Exec(ctx, query, newHash, email)
-    if err != nil {
-        return err
-    }
-    if tag.RowsAffected() == 0 {
-        return errors.New("user not found")
-    }
-    return nil
+	// สังเกตตรง "User" ต้องมีเครื่องหมายคำพูดครอบตัว U ใหญ่
+	query := `UPDATE "User" SET password_hash = $1 WHERE email = $2`
+	tag, err := s.DB.Exec(ctx, query, newHash, email)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
